@@ -23,12 +23,55 @@ These were probed on this machine before planning. Do not re-litigate them; do n
 
 - Platform floor: macOS 14. `platforms: [.macOS(.v14)]`, target triple `arm64-apple-macosx14.0`.
 - Swift 6.0.3 toolchain, but **language mode 5** (`.swiftLanguageMode(.v5)`) on every target. Swift 6 strict concurrency is not worth fighting here.
-- **XCTest, not swift-testing.** Only Command Line Tools are installed; XCTest is the dependable choice.
+- **swift-testing (`import Testing`), not XCTest.** See "Test framework" below.
 - No Xcode. No `.xcodeproj`. Build is `swift build` plus `build.sh`.
 - No third-party dependencies. Foundation, AppKit, ScreenCaptureKit only.
 - Free at the margin: Gemini free tier primary, `claude` CLI fallback. **Never** call the paid Anthropic API.
 - Every unit in `GhostshotCore` takes its collaborators by protocol so tests never hit the network, the filesystem outside a temp dir, or a real process.
 - Secrets live in `~/.config/ghostshot/config.json` at mode `0600`. Never commit it; never log the API key.
+
+## Test framework
+
+**Corrected during execution.** The plan was first written assuming XCTest.
+That is wrong on this machine and the tasks below still show XCTest code.
+
+Discovered facts:
+
+- Xcode 15.4 *is* installed at `/Applications/Xcode.app`, but it carries
+  Swift **5.10**, which cannot build a `swift-tools-version: 6.0` package.
+- The active toolchain is Command Line Tools with Swift **6.0.3**. It has no
+  `XCTest` module, so `import XCTest` fails to compile.
+- The Command Line Tools **do** ship swift-testing
+  (`/Library/Developer/CommandLineTools/Library/Developer/Frameworks/Testing.framework`).
+  Verified working: `swift test` runs `@Test` functions on Swift 6.0.3 with no
+  Xcode involved.
+
+So: keep Swift 6.0.3 and CLT, and write every test with swift-testing.
+`DEVELOPER_DIR` must NOT be pointed at Xcode.
+
+**Translate each task's test code mechanically using this table.** The
+assertions and the behaviour under test do not change; only the syntax does.
+
+| XCTest (as written in the tasks) | swift-testing (what to actually write) |
+| --- | --- |
+| `import XCTest` | `import Testing` plus `import Foundation` |
+| `final class FooTests: XCTestCase` | `@Suite struct FooTests` |
+| `func test_someBehavior()` | `@Test func someBehavior()` |
+| `XCTAssertEqual(a, b)` | `#expect(a == b)` |
+| `XCTAssertNotEqual(a, b)` | `#expect(a != b)` |
+| `XCTAssertNil(a)` | `#expect(a == nil)` |
+| `XCTAssertTrue(a)` / `XCTAssertFalse(a)` | `#expect(a)` / `#expect(!a)` |
+| `try XCTUnwrap(a)` | `try #require(a)` |
+| `XCTFail("msg")` | `Issue.record("msg")` |
+| `setUpWithError` / `tearDownWithError` | per-test temp directory helper with `defer` |
+
+Two suites need a `final class` rather than a `struct`, because their tests
+mutate suite-level state: `ProviderRouterTests` (mutates `state`) and any
+suite holding a fake across calls. A `@Suite final class` still gets a fresh
+instance per test.
+
+Run a single suite with `swift test --filter FooTests`; run everything with
+`swift test`.
 
 ## Deviation from the spec
 
