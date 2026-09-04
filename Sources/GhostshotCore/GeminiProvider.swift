@@ -16,6 +16,9 @@ public final class GeminiProvider: AIProvider {
     }
 
     public func ask(history: [Message]) async throws -> String {
+        guard !apiKey.isEmpty else {
+            throw AIError.providerUnavailable("no Gemini API key configured")
+        }
         let request = try buildRequest(history: history)
 
         let data: Data
@@ -31,6 +34,11 @@ public final class GeminiProvider: AIProvider {
         let raw = String(decoding: data, as: UTF8.self)
         if response.statusCode == 429 || raw.contains("RESOURCE_EXHAUSTED") {
             throw AIError.quotaExhausted
+        }
+        // A rejected credential is not a bad answer, it is an unusable provider:
+        // surfacing it as .providerUnavailable lets the router fall back to Claude.
+        if response.statusCode == 401 || response.statusCode == 403 {
+            throw AIError.providerUnavailable("HTTP \(response.statusCode): \(raw.prefix(300))")
         }
         guard (200..<300).contains(response.statusCode) else {
             throw AIError.badResponse("HTTP \(response.statusCode): \(raw.prefix(300))")

@@ -106,3 +106,39 @@ import Testing
         }
     }
 }
+
+@Suite struct GeminiProviderAvailabilityTests {
+    private func message() -> [Message] {
+        [Message(role: .user, text: "hi")]
+    }
+
+    @Test func emptyAPIKeyFailsWithoutTouchingTheNetwork() async {
+        let client = FakeHTTPClient()
+        let provider = GeminiProvider(apiKey: "", model: "gemini-2.5-flash", systemPrompt: "s", client: client)
+
+        await #expect(throws: AIError.providerUnavailable("no Gemini API key configured")) {
+            try await provider.ask(history: message())
+        }
+        #expect(client.sentRequests.isEmpty)
+    }
+
+    @Test func rejectedCredentialsAreProviderUnavailableSoTheRouterCanFallBack() async {
+        for status in [401, 403] {
+            let client = FakeHTTPClient()
+            client.responses = [(Data(#"{"error":{"code":\#(status)}}"#.utf8), status)]
+            let provider = GeminiProvider(apiKey: "k", model: "m", systemPrompt: "s", client: client)
+
+            do {
+                _ = try await provider.ask(history: message())
+                Issue.record("expected HTTP \(status) to throw")
+            } catch let error as AIError {
+                guard case .providerUnavailable = error else {
+                    Issue.record("HTTP \(status) gave \(error), wanted .providerUnavailable")
+                    return
+                }
+            } catch {
+                Issue.record("unexpected error \(error)")
+            }
+        }
+    }
+}

@@ -45,9 +45,13 @@ public final class ProviderRouter {
                 let text = try await primary.ask(history: history)
                 return RouterAnswer(text: text, providerName: primary.name)
             } catch AIError.quotaExhausted {
+                // Sticky for the rest of the day: quota does not come back sooner.
                 var state = loadState()
                 state.geminiExhaustedOn = today()
                 saveState(state)
+            } catch AIError.providerUnavailable {
+                // Missing or rejected credentials. Fall back now, but do not mark
+                // the day exhausted, so the next capture retries the primary.
             }
         }
 

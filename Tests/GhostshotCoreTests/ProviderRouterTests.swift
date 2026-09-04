@@ -113,4 +113,17 @@ private final class StubProvider: AIProvider, @unchecked Sendable {
             Issue.record("expected AIError, got \(error)")
         }
     }
+
+    @Test func unavailablePrimaryFailsOverWithoutMarkingTheDayExhausted() async throws {
+        let primary = StubProvider(name: "gemini", error: .providerUnavailable("no Gemini API key configured"))
+        let fallback = StubProvider(name: "claude-code", answer: "from claude")
+
+        let answer = try await makeRouter(primary: primary, fallback: fallback).ask(history: history)
+
+        #expect(answer.text == "from claude")
+        #expect(answer.providerName == "claude-code")
+        // Not sticky: a missing key or a bad credential may be fixed at any time,
+        // so the next capture tries Gemini again.
+        #expect(state.geminiExhaustedOn == nil)
+    }
 }
