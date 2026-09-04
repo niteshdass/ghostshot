@@ -1,0 +1,5 @@
+.build/
+*.app/
+config.json
+state.json
+.DS_Store
