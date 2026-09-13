@@ -33,7 +33,7 @@ public final class GeminiProvider: AIProvider {
 
         let raw = String(decoding: data, as: UTF8.self)
         if response.statusCode == 429 || raw.contains("RESOURCE_EXHAUSTED") {
-            throw AIError.quotaExhausted
+            throw Self.classifyQuotaError(body: raw)
         }
         // A rejected credential is not a bad answer, it is an unusable provider:
         // surfacing it as .providerUnavailable lets the router fall back to Claude.
@@ -56,6 +56,18 @@ public final class GeminiProvider: AIProvider {
         let text = parts.compactMap { $0["text"] as? String }.joined()
         guard !text.isEmpty else { throw AIError.badResponse("empty answer") }
         return text
+    }
+
+    /// Google reports which window was exceeded in the QuotaFailure detail, as a
+    /// `quotaId` such as `GenerateRequestsPerMinutePerProjectPerModel-FreeTier`.
+    /// The distinction matters: the per-minute window clears within the minute,
+    /// while the per-day one costs the rest of the day's allowance.
+    ///
+    /// An unrecognised body stays `.quotaExhausted`, the conservative reading —
+    /// retrying a genuinely empty daily quota on every capture would put a failed
+    /// round trip in front of every answer.
+    static func classifyQuotaError(body: String) -> AIError {
+        body.contains("PerMinute") ? .rateLimited : .quotaExhausted
     }
 
     func buildRequest(history: [Message]) throws -> URLRequest {

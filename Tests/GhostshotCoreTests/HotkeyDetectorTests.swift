@@ -14,6 +14,23 @@ import Testing
         #expect(tap(d, .rightCommand, at: 0.2) == .capture)
     }
 
+    @Test func rightShiftDoubleTapQuits() {
+        let d = HotkeyDetector(doubleTapWindowMs: 300)
+        #expect(tap(d, .rightShift, at: 0.0) == nil)
+        #expect(tap(d, .rightShift, at: 0.2) == .quit)
+    }
+
+    /// Typing a capital letter holds Shift across a key press, which must never quit.
+    @Test func shiftHeldForACapitalLetterDoesNotQuit() {
+        let d = HotkeyDetector(doubleTapWindowMs: 300)
+        #expect(tap(d, .rightShift, at: 0.0) == nil)
+        _ = d.handle(.modifierDown(.rightShift), at: 0.1)
+        _ = d.handle(.otherKeyDown, at: 0.11)
+        #expect(d.handle(.modifierUp(.rightShift), at: 0.12) == nil)
+        // The contaminated tap also cleared the pending first tap.
+        #expect(tap(d, .rightShift, at: 0.2) == nil)
+    }
+
     @Test func twoTapsOutsideWindowFireNothing() {
         let d = HotkeyDetector(doubleTapWindowMs: 300)
         #expect(tap(d, .rightCommand, at: 0.0) == nil)

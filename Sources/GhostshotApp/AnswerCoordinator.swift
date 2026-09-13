@@ -65,7 +65,15 @@ final class AnswerCoordinator {
             panel.toggleVisibility()
         case .resetConversation:
             resetConversation()
+        case .quit:
+            quit()
         }
+    }
+
+    /// The app has no Dock icon and no menu bar, so this hotkey is the only way
+    /// to stop it from the keyboard.
+    private func quit() {
+        NSApp.terminate(nil)
     }
 
     private func resetConversation() {
@@ -153,6 +161,8 @@ final class AnswerCoordinator {
         switch aiError {
         case .quotaExhausted:
             return "Both providers are out of quota."
+        case .rateLimited:
+            return "Both providers are rate limited. Wait a minute and try again."
         case .network(let detail):
             return "Network error: \(detail)"
         case .badResponse(let detail):

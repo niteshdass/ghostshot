@@ -32,11 +32,20 @@ public final class ProviderRouter {
     }
 
     public static func todayString() -> String {
+        todayString(for: Date())
+    }
+
+    /// Gemini refills its requests-per-day quota at midnight Pacific, so the
+    /// sticky flag has to use Pacific dates. On a local calendar the two
+    /// boundaries drift apart by the UTC offset and Gemini sits unused for hours
+    /// after Google has already refilled it.
+    public static func todayString(for date: Date) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "America/Los_Angeles")
         formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
+        return formatter.string(from: date)
     }
 
     public func ask(history: [Message]) async throws -> RouterAnswer {
@@ -49,6 +58,9 @@ public final class ProviderRouter {
                 var state = loadState()
                 state.geminiExhaustedOn = today()
                 saveState(state)
+            } catch AIError.rateLimited {
+                // The per-minute window clears by itself, so the next capture
+                // should try Gemini again rather than spend the day on Claude.
             } catch AIError.providerUnavailable {
                 // Missing or rejected credentials. Fall back now, but do not mark
                 // the day exhausted, so the next capture retries the primary.

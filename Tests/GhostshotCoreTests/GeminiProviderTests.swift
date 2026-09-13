@@ -71,6 +71,29 @@ import Testing
         #expect(answer == "one two")
     }
 
+    /// Google names the window that was exceeded in the QuotaFailure detail.
+    private func quotaBody(_ quotaId: String) -> Data {
+        Data(#"{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaMetric":"generativelanguage.googleapis.com/generate_content_free_tier_requests","quotaId":"\#(quotaId)"}]}]}}"#.utf8)
+    }
+
+    @Test func perMinuteQuotaMapsToRateLimited() async {
+        let client = FakeHTTPClient()
+        client.responses = [(quotaBody("GenerateRequestsPerMinutePerProjectPerModel-FreeTier"), 429)]
+
+        await #expect(throws: AIError.rateLimited) {
+            _ = try await makeProvider(client).ask(history: [Message(role: .user, text: "q")])
+        }
+    }
+
+    @Test func perDayQuotaMapsToQuotaExhausted() async {
+        let client = FakeHTTPClient()
+        client.responses = [(quotaBody("GenerateRequestsPerDayPerProjectPerModel-FreeTier"), 429)]
+
+        await #expect(throws: AIError.quotaExhausted) {
+            _ = try await makeProvider(client).ask(history: [Message(role: .user, text: "q")])
+        }
+    }
+
     @Test func http429MapsToQuotaExhausted() async {
         let client = FakeHTTPClient()
         client.responses = [(Data(#"{"error":{"message":"rate limited"}}"#.utf8), 429)]

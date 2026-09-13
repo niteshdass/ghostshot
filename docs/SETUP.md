@@ -11,9 +11,13 @@ and shows the answer in a panel that screen sharing cannot see.
 | Right ⌘ ⌘ | Capture the screen and ask |
 | Right ⌥ ⌥ | Show / hide the answer panel |
 | Right ⌃ ⌃ | Start a fresh conversation |
+| Right ⇧ ⇧ | Quit Ghostshot |
 
 Both taps must land within 300 ms (`doubleTapWindowMs`). Holding the key as
-part of a real shortcut (⌘C, ⌘Tab) never triggers it.
+part of a real shortcut (⌘C, ⌘Tab) never triggers it — including Shift held for
+a capital letter, so typing never quits the app.
+
+Right ⌥ ⌥ only hides the panel; the app keeps running. Right ⇧ ⇧ exits for real.
 
 ## 1. Build
 
@@ -61,8 +65,30 @@ Then in **System Settings > Privacy & Security**:
 
 macOS requires a relaunch after each grant. Run `./run.sh` again.
 
-Rebuilding changes the ad-hoc signature, so macOS may ask for both permissions
-again after a rebuild. Toggle the existing entry off and on if it looks stuck.
+### Grant them only once
+
+TCC records a *designated requirement*, not an app name. An ad-hoc signature
+(`codesign --sign -`) produces a requirement of nothing but the cdhash, so every
+code change is a new app to TCC: the switch still reads as on, but it no longer
+matches the binary and the permission silently does not apply.
+
+Run this once to get a stable identity:
+
+```bash
+./setup-signing.sh   # self-signed cert in your login keychain, asks for your password
+```
+
+`build.sh` then signs with it and the requirement becomes `identifier
+"com.ghostshot.app" and certificate leaf = H"..."`, which survives every rebuild.
+If you had already granted permissions under the ad-hoc signature, clear the
+stale rows first:
+
+```bash
+tccutil reset Accessibility com.ghostshot.app
+tccutil reset ScreenCapture com.ghostshot.app
+```
+
+To undo it all, delete "Ghostshot Local Signing" in Keychain Access.
 
 ## 4. Verify the stealth property
 
@@ -99,6 +125,8 @@ screen as shared with those services.
 Delete `state.json` to reset everything.
 
 ## Stopping it
+
+Double-tap Right ⇧, or from a terminal:
 
 ```bash
 pkill -f 'Ghostshot.app/Contents/MacOS/GhostshotApp'

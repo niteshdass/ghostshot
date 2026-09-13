@@ -4,6 +4,7 @@ public enum ModifierKey: Equatable, Hashable, Sendable {
     case rightCommand
     case rightOption
     case rightControl
+    case rightShift
 }
 
 public enum HotkeyEvent: Equatable, Sendable {
@@ -17,6 +18,7 @@ public enum HotkeyAction: Equatable, Sendable {
     case capture
     case togglePanel
     case resetConversation
+    case quit
 }
 
 public final class HotkeyDetector {
@@ -68,6 +70,7 @@ public final class HotkeyDetector {
         case .rightCommand: return .capture
         case .rightOption: return .togglePanel
         case .rightControl: return .resetConversation
+        case .rightShift: return .quit
         }
     }
 }

@@ -1,8 +1,11 @@
 import Foundation
 
 public enum AIError: Error, Equatable {
-    /// The provider's free quota is used up. This is the only error that triggers failover.
+    /// The provider's quota for the day is used up. Failover is sticky until it resets.
     case quotaExhausted
+    /// A short-window throttle (Gemini's requests-per-minute). Failover for this
+    /// request only: the window clears on its own within the minute.
+    case rateLimited
     case network(String)
     case badResponse(String)
     case providerUnavailable(String)

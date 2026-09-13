@@ -85,6 +85,27 @@ private final class StubProvider: AIProvider, @unchecked Sendable {
         #expect(answer.text == "gemini is back")
     }
 
+    @Test func rateLimitedFailsOverWithoutMarkingTheDayExhausted() async throws {
+        let primary = StubProvider(name: "gemini", error: .rateLimited)
+        let fallback = StubProvider(name: "claude-code", answer: "from claude")
+
+        let answer = try await makeRouter(primary: primary, fallback: fallback).ask(history: history)
+
+        #expect(answer.providerName == "claude-code")
+        // A per-minute throttle clears within the minute. Marking the day exhausted
+        // here would spend the rest of the daily allowance on the fallback.
+        #expect(state.geminiExhaustedOn == nil)
+    }
+
+    /// Google refills RPD at midnight Pacific, so the app's day has to flip there
+    /// too — on a local clock the two boundaries drift by hours.
+    @Test func todayStringUsesGooglesPacificResetBoundary() {
+        // 2026-09-04 00:30 PDT
+        #expect(ProviderRouter.todayString(for: Date(timeIntervalSince1970: 1_788_507_000)) == "2026-09-04")
+        // 2026-09-03 23:30 PDT, one hour earlier
+        #expect(ProviderRouter.todayString(for: Date(timeIntervalSince1970: 1_788_503_400)) == "2026-09-03")
+    }
+
     @Test func nonQuotaErrorDoesNotFailOver() async {
         let primary = StubProvider(name: "gemini", error: .network("offline"))
         let fallback = StubProvider(name: "claude-code")

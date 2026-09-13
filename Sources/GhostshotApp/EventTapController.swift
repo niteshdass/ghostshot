@@ -17,11 +17,13 @@ final class EventTapController {
     private static let rightCommandKeyCode: Int64 = 54
     private static let rightOptionKeyCode: Int64 = 61
     private static let rightControlKeyCode: Int64 = 62
+    private static let rightShiftKeyCode: Int64 = 60
 
     /// Device-dependent flag bits, which distinguish right from left.
     private static let rightCommandMask: UInt64 = 0x10
     private static let rightOptionMask: UInt64 = 0x40
     private static let rightControlMask: UInt64 = 0x2000
+    private static let rightShiftMask: UInt64 = 0x4
 
     init(doubleTapWindowMs: Int, onAction: @escaping (HotkeyAction) -> Void) {
         self.detector = HotkeyDetector(doubleTapWindowMs: Double(doubleTapWindowMs))
@@ -111,6 +113,7 @@ final class EventTapController {
         case rightCommandKeyCode: return .rightCommand
         case rightOptionKeyCode: return .rightOption
         case rightControlKeyCode: return .rightControl
+        case rightShiftKeyCode: return .rightShift
         default: return nil
         }
     }
@@ -120,6 +123,7 @@ final class EventTapController {
         case .rightCommand: return rightCommandMask
         case .rightOption: return rightOptionMask
         case .rightControl: return rightControlMask
+        case .rightShift: return rightShiftMask
         }
     }
 
