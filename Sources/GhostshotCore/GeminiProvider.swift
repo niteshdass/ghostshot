@@ -1,14 +1,22 @@
 import Foundation
 
 public final class GeminiProvider: AIProvider {
-    public let name = "gemini"
+    /// One instance per API key, so the name carries which key answered ("gemini-2").
+    public let name: String
 
     private let apiKey: String
     private let model: String
     private let systemPrompt: String
     private let client: HTTPClient
 
-    public init(apiKey: String, model: String, systemPrompt: String, client: HTTPClient) {
+    public init(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        client: HTTPClient,
+        name: String = "gemini"
+    ) {
+        self.name = name
         self.apiKey = apiKey
         self.model = model
         self.systemPrompt = systemPrompt
@@ -36,8 +44,10 @@ public final class GeminiProvider: AIProvider {
             throw Self.classifyQuotaError(body: raw)
         }
         // A rejected credential is not a bad answer, it is an unusable provider:
-        // surfacing it as .providerUnavailable lets the router fall back to Claude.
-        if response.statusCode == 401 || response.statusCode == 403 {
+        // surfacing it as .providerUnavailable lets the router move to the next key.
+        // 404 lands here too: Google hides some models from newer projects, so one
+        // key can be denied a model the others are served.
+        if [401, 403, 404].contains(response.statusCode) {
             throw AIError.providerUnavailable("HTTP \(response.statusCode): \(raw.prefix(300))")
         }
         guard (200..<300).contains(response.statusCode) else {

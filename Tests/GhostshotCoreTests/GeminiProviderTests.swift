@@ -145,8 +145,10 @@ import Testing
         #expect(client.sentRequests.isEmpty)
     }
 
+    /// 404 is in the list because Google serves some models only to older
+    /// projects: one key can be refused a model that the next key is granted.
     @Test func rejectedCredentialsAreProviderUnavailableSoTheRouterCanFallBack() async {
-        for status in [401, 403] {
+        for status in [401, 403, 404] {
             let client = FakeHTTPClient()
             client.responses = [(Data(#"{"error":{"code":\#(status)}}"#.utf8), status)]
             let provider = GeminiProvider(apiKey: "k", model: "m", systemPrompt: "s", client: client)

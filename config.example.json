@@ -1,0 +1,12 @@
+{
+  "geminiApiKey": "",
+  "geminiApiKeys": [
+    "",
+    ""
+  ],
+  "ntfyTopic": "",
+  "geminiModel": "gemini-3.6-flash",
+  "notifyPhone": true,
+  "copyToClipboard": true,
+  "doubleTapWindowMs": 300
+}

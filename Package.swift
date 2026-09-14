@@ -14,6 +14,11 @@ let package = Package(
             dependencies: ["GhostshotCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        .executableTarget(
+            name: "GhostshotLauncher",
+            dependencies: ["GhostshotCore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         .testTarget(
             name: "GhostshotCoreTests",
             dependencies: ["GhostshotCore"],

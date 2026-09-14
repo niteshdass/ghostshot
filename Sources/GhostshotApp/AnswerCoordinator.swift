@@ -26,12 +26,18 @@ final class AnswerCoordinator {
         self.panel = panel
 
         let http = URLSessionHTTPClient()
-        let gemini = GeminiProvider(
-            apiKey: config.geminiApiKey,
-            model: config.geminiModel,
-            systemPrompt: config.systemPrompt,
-            client: http
-        )
+        // One provider per key. The name is what the panel shows, so a single-key
+        // setup stays plain "gemini" and a list reads "gemini-1", "gemini-2", ...
+        let keys = config.allGeminiKeys
+        let geminis = keys.enumerated().map { index, key in
+            GeminiProvider(
+                apiKey: key,
+                model: config.geminiModel,
+                systemPrompt: config.systemPrompt,
+                client: http,
+                name: keys.count == 1 ? "gemini" : "gemini-\(index + 1)"
+            )
+        }
         let claude = ClaudeCodeProvider(
             executablePath: AnswerCoordinator.resolveClaudePath(),
             systemPrompt: config.systemPrompt,
@@ -43,7 +49,7 @@ final class AnswerCoordinator {
 
         // The router persists quota state; capture the store, not self.
         self.router = ProviderRouter(
-            primary: gemini,
+            primaries: geminis,
             fallback: claude,
             loadState: { store.loadState() },
             saveState: { store.saveState($0) }

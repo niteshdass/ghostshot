@@ -1,13 +1,15 @@
 import AppKit
 import CoreGraphics
 import Foundation
-import GhostshotCore
 
 /// Watches modifier keys with a passive tap and reports double-tap gestures.
 ///
 /// The tap is `.listenOnly`: it can never swallow, delay, or alter a keystroke,
 /// so normal typing is unaffected even if this code misbehaves.
-final class EventTapController {
+///
+/// Both processes use it: the app for its four gestures, the launcher for the
+/// one gesture that starts the app back up.
+public final class EventTapController {
     private var detector: HotkeyDetector
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -25,14 +27,14 @@ final class EventTapController {
     private static let rightControlMask: UInt64 = 0x2000
     private static let rightShiftMask: UInt64 = 0x4
 
-    init(doubleTapWindowMs: Int, onAction: @escaping (HotkeyAction) -> Void) {
+    public init(doubleTapWindowMs: Int, onAction: @escaping (HotkeyAction) -> Void) {
         self.detector = HotkeyDetector(doubleTapWindowMs: Double(doubleTapWindowMs))
         self.onAction = onAction
     }
 
     /// Returns false when Accessibility permission has not been granted.
     @discardableResult
-    func start() -> Bool {
+    public func start() -> Bool {
         let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
         let unmanaged = Unmanaged.passUnretained(self).toOpaque()
 
@@ -60,7 +62,7 @@ final class EventTapController {
         return true
     }
 
-    func stop() {
+    public func stop() {
         if let tap {
             CGEvent.tapEnable(tap: tap, enable: false)
         }
@@ -128,7 +130,7 @@ final class EventTapController {
     }
 
     /// Prompts once for Accessibility permission if it has not been granted.
-    static func ensureAccessibilityPermission() -> Bool {
+    public static func ensureAccessibilityPermission() -> Bool {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }

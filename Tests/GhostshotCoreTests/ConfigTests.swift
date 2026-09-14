@@ -64,11 +64,72 @@ import Testing
             let store = makeStore(dir)
             var state = store.loadState()
             state.claudeSessionID = "sess-9"
-            state.geminiExhaustedOn = "2026-09-04"
+            state.exhaustedOn = ["gemini-1": "2026-09-04"]
             store.saveState(state)
 
             #expect(store.loadState() == state)
         }
+    }
+
+    @Test func keyListCombinesTheSingleKeyAndTheListInOrder() throws {
+        try withTempDir { dir in
+            let url = dir.appendingPathComponent("config.json")
+            try #"{"geminiApiKey":"ONE","geminiApiKeys":["TWO","THREE"]}"#
+                .write(to: url, atomically: true, encoding: .utf8)
+
+            #expect(try makeStore(dir).loadConfig().allGeminiKeys == ["ONE", "TWO", "THREE"])
+        }
+    }
+
+    @Test func keyListDropsBlanksAndRepeatsAndTrimsWhitespace() {
+        let config = Config(
+            geminiApiKey: "",
+            geminiApiKeys: ["  ONE  ", "TWO", "ONE", "   "],
+            ntfyTopic: "",
+            geminiModel: "m",
+            systemPrompt: "s",
+            doubleTapWindowMs: 300,
+            notifyPhone: false,
+            copyToClipboard: false
+        )
+
+        #expect(config.allGeminiKeys == ["ONE", "TWO"])
+    }
+
+    @Test func aConfigWithOnlyTheOldSingleKeyStillWorks() throws {
+        try withTempDir { dir in
+            let url = dir.appendingPathComponent("config.json")
+            try #"{"geminiApiKey":"ONLY"}"#.write(to: url, atomically: true, encoding: .utf8)
+
+            #expect(try makeStore(dir).loadConfig().allGeminiKeys == ["ONLY"])
+        }
+    }
+
+    @Test func defaultDirectoryIsTheFolderHoldingTheAppBundle() {
+        let dir = ConfigStore.defaultDirectory(
+            environment: [:],
+            bundleURL: URL(fileURLWithPath: "/Users/x/Projects/ghostshot/Ghostshot.app")
+        )
+
+        #expect(dir.path == "/Users/x/Projects/ghostshot")
+    }
+
+    @Test func environmentOverridesTheDefaultDirectory() {
+        let dir = ConfigStore.defaultDirectory(
+            environment: ["GHOSTSHOT_CONFIG_DIR": "/tmp/elsewhere"],
+            bundleURL: URL(fileURLWithPath: "/Users/x/Projects/ghostshot/Ghostshot.app")
+        )
+
+        #expect(dir.path == "/tmp/elsewhere")
+    }
+
+    @Test func emptyEnvironmentOverrideIsIgnored() {
+        let dir = ConfigStore.defaultDirectory(
+            environment: ["GHOSTSHOT_CONFIG_DIR": ""],
+            bundleURL: URL(fileURLWithPath: "/Users/x/Projects/ghostshot/Ghostshot.app")
+        )
+
+        #expect(dir.path == "/Users/x/Projects/ghostshot")
     }
 
     @Test func missingStateFileReturnsEmptyState() throws {

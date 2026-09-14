@@ -31,8 +31,16 @@ private final class StubProvider: AIProvider, @unchecked Sendable {
         fallback: StubProvider,
         today: String = "2026-09-04"
     ) -> ProviderRouter {
+        makeRouter(primaries: [primary], fallback: fallback, today: today)
+    }
+
+    private func makeRouter(
+        primaries: [StubProvider],
+        fallback: StubProvider,
+        today: String = "2026-09-04"
+    ) -> ProviderRouter {
         ProviderRouter(
-            primary: primary,
+            primaries: primaries,
             fallback: fallback,
             loadState: { self.state },
             saveState: { self.state = $0 },
@@ -59,11 +67,11 @@ private final class StubProvider: AIProvider, @unchecked Sendable {
 
         #expect(answer.text == "from claude")
         #expect(answer.providerName == "claude-code")
-        #expect(state.geminiExhaustedOn == "2026-09-04")
+        #expect(state.exhaustedOn["gemini"] == "2026-09-04")
     }
 
     @Test func sameDaySkipsPrimaryEntirely() async throws {
-        state.geminiExhaustedOn = "2026-09-04"
+        state.exhaustedOn["gemini"] = "2026-09-04"
         let primary = StubProvider(name: "gemini", answer: "should not be used")
         let fallback = StubProvider(name: "claude-code", answer: "from claude")
 
@@ -74,7 +82,7 @@ private final class StubProvider: AIProvider, @unchecked Sendable {
     }
 
     @Test func nextDayRetriesPrimary() async throws {
-        state.geminiExhaustedOn = "2026-09-03"
+        state.exhaustedOn["gemini"] = "2026-09-03"
         let primary = StubProvider(name: "gemini", answer: "gemini is back")
         let fallback = StubProvider(name: "claude-code")
 
@@ -94,7 +102,7 @@ private final class StubProvider: AIProvider, @unchecked Sendable {
         #expect(answer.providerName == "claude-code")
         // A per-minute throttle clears within the minute. Marking the day exhausted
         // here would spend the rest of the daily allowance on the fallback.
-        #expect(state.geminiExhaustedOn == nil)
+        #expect(state.exhaustedOn["gemini"] == nil)
     }
 
     /// Google refills RPD at midnight Pacific, so the app's day has to flip there
@@ -145,6 +153,83 @@ private final class StubProvider: AIProvider, @unchecked Sendable {
         #expect(answer.providerName == "claude-code")
         // Not sticky: a missing key or a bad credential may be fixed at any time,
         // so the next capture tries Gemini again.
-        #expect(state.geminiExhaustedOn == nil)
+        #expect(state.exhaustedOn["gemini"] == nil)
+    }
+
+    // MARK: - Several keys
+
+    @Test func exhaustedKeyHandsOverToTheNextKeyNotToTheFallback() async throws {
+        let first = StubProvider(name: "gemini-1", error: .quotaExhausted)
+        let second = StubProvider(name: "gemini-2", answer: "from the second key")
+        let fallback = StubProvider(name: "claude-code")
+
+        let answer = try await makeRouter(primaries: [first, second], fallback: fallback)
+            .ask(history: history)
+
+        #expect(answer.text == "from the second key")
+        #expect(answer.providerName == "gemini-2")
+        #expect(fallback.callCount == 0)
+        // Only the burnt key is recorded.
+        #expect(state.exhaustedOn == ["gemini-1": "2026-09-04"])
+    }
+
+    @Test func fallbackOnlyAfterEveryKeyIsExhausted() async throws {
+        let keys = (1...3).map { StubProvider(name: "gemini-\($0)", error: .quotaExhausted) }
+        let fallback = StubProvider(name: "claude-code", answer: "from claude")
+
+        let answer = try await makeRouter(primaries: keys, fallback: fallback).ask(history: history)
+
+        #expect(answer.providerName == "claude-code")
+        #expect(keys.allSatisfy { $0.callCount == 1 })
+        #expect(state.exhaustedOn.count == 3)
+    }
+
+    @Test func sameDaySkipsTheBurntKeyAndStartsAtTheNextOne() async throws {
+        state.exhaustedOn = ["gemini-1": "2026-09-04"]
+        let first = StubProvider(name: "gemini-1", answer: "should not be used")
+        let second = StubProvider(name: "gemini-2", answer: "from the second key")
+        let fallback = StubProvider(name: "claude-code")
+
+        let answer = try await makeRouter(primaries: [first, second], fallback: fallback)
+            .ask(history: history)
+
+        #expect(first.callCount == 0)
+        #expect(answer.providerName == "gemini-2")
+    }
+
+    @Test func aKeyBurntYesterdayIsTriedAgainToday() async throws {
+        state.exhaustedOn = ["gemini-1": "2026-09-03"]
+        let first = StubProvider(name: "gemini-1", answer: "key one is back")
+        let second = StubProvider(name: "gemini-2")
+
+        let answer = try await makeRouter(
+            primaries: [first, second],
+            fallback: StubProvider(name: "claude-code"),
+            today: "2026-09-04"
+        ).ask(history: history)
+
+        #expect(answer.providerName == "gemini-1")
+        #expect(second.callCount == 0)
+    }
+
+    @Test func aRejectedKeyIsSkippedWithoutBeingMarkedExhausted() async throws {
+        let first = StubProvider(name: "gemini-1", error: .providerUnavailable("bad key"))
+        let second = StubProvider(name: "gemini-2", answer: "from the second key")
+
+        let answer = try await makeRouter(
+            primaries: [first, second],
+            fallback: StubProvider(name: "claude-code")
+        ).ask(history: history)
+
+        #expect(answer.providerName == "gemini-2")
+        #expect(state.exhaustedOn.isEmpty)
+    }
+
+    @Test func noKeysAtAllGoesStraightToTheFallback() async throws {
+        let fallback = StubProvider(name: "claude-code", answer: "from claude")
+
+        let answer = try await makeRouter(primaries: [], fallback: fallback).ask(history: history)
+
+        #expect(answer.providerName == "claude-code")
     }
 }

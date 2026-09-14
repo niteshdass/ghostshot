@@ -11,20 +11,21 @@ public struct RouterAnswer: Equatable, Sendable {
 }
 
 public final class ProviderRouter {
-    private let primary: AIProvider
+    /// Tried in order; each one is a separate Gemini key.
+    private let primaries: [AIProvider]
     private let fallback: AIProvider
     private let loadState: () -> AppState
     private let saveState: (AppState) -> Void
     private let today: () -> String
 
     public init(
-        primary: AIProvider,
+        primaries: [AIProvider],
         fallback: AIProvider,
         loadState: @escaping () -> AppState,
         saveState: @escaping (AppState) -> Void,
         today: @escaping () -> String = { ProviderRouter.todayString() }
     ) {
-        self.primary = primary
+        self.primaries = primaries
         self.fallback = fallback
         self.loadState = loadState
         self.saveState = saveState
@@ -49,25 +50,31 @@ public final class ProviderRouter {
     }
 
     public func ask(history: [Message]) async throws -> RouterAnswer {
-        if loadState().geminiExhaustedOn != today() {
+        for primary in primaries {
+            guard loadState().exhaustedOn[primary.name] != today() else { continue }
             do {
                 let text = try await primary.ask(history: history)
                 return RouterAnswer(text: text, providerName: primary.name)
             } catch AIError.quotaExhausted {
                 // Sticky for the rest of the day: quota does not come back sooner.
-                var state = loadState()
-                state.geminiExhaustedOn = today()
-                saveState(state)
+                // Only this key is burnt, so the loop moves on to the next one.
+                markExhausted(primary.name)
             } catch AIError.rateLimited {
-                // The per-minute window clears by itself, so the next capture
-                // should try Gemini again rather than spend the day on Claude.
+                // The per-minute window clears by itself, so nothing is recorded
+                // and the next capture starts from the top of the list again.
             } catch AIError.providerUnavailable {
-                // Missing or rejected credentials. Fall back now, but do not mark
-                // the day exhausted, so the next capture retries the primary.
+                // Missing or rejected credentials. Skip this key for now, but do
+                // not mark it exhausted: it may be fixed before the next capture.
             }
         }
 
         let text = try await fallback.ask(history: history)
         return RouterAnswer(text: text, providerName: fallback.name)
+    }
+
+    private func markExhausted(_ name: String) {
+        var state = loadState()
+        state.exhaustedOn[name] = today()
+        saveState(state)
     }
 }

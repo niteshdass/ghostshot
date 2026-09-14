@@ -1,7 +1,12 @@
 import Foundation
 
 public struct Config: Codable, Equatable, Sendable {
+    /// A single key. Kept so older config files keep working; `geminiApiKeys` is
+    /// the one to grow.
     public var geminiApiKey: String
+    /// Tried in order. When one reports its daily quota gone, the next one takes
+    /// over; when they are all gone, Claude does.
+    public var geminiApiKeys: [String]
     public var ntfyTopic: String
     public var geminiModel: String
     public var systemPrompt: String
@@ -11,8 +16,9 @@ public struct Config: Codable, Equatable, Sendable {
 
     public static let defaults = Config(
         geminiApiKey: "",
+        geminiApiKeys: [],
         ntfyTopic: "",
-        geminiModel: "gemini-2.5-flash",
+        geminiModel: "gemini-3.6-flash",
         systemPrompt: """
         You answer questions that appear in screenshots taken during a live call. \
         Lead with the answer in one or two sentences. Then give at most two short lines of \
@@ -24,8 +30,17 @@ public struct Config: Codable, Equatable, Sendable {
         copyToClipboard: true
     )
 
+    /// `geminiApiKey` first, then `geminiApiKeys`, blanks and repeats removed.
+    public var allGeminiKeys: [String] {
+        var seen = Set<String>()
+        return ([geminiApiKey] + geminiApiKeys)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
     public init(
         geminiApiKey: String,
+        geminiApiKeys: [String] = [],
         ntfyTopic: String,
         geminiModel: String,
         systemPrompt: String,
@@ -34,6 +49,7 @@ public struct Config: Codable, Equatable, Sendable {
         copyToClipboard: Bool
     ) {
         self.geminiApiKey = geminiApiKey
+        self.geminiApiKeys = geminiApiKeys
         self.ntfyTopic = ntfyTopic
         self.geminiModel = geminiModel
         self.systemPrompt = systemPrompt
@@ -46,6 +62,7 @@ public struct Config: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Config.defaults
         geminiApiKey = try c.decodeIfPresent(String.self, forKey: .geminiApiKey) ?? d.geminiApiKey
+        geminiApiKeys = try c.decodeIfPresent([String].self, forKey: .geminiApiKeys) ?? d.geminiApiKeys
         ntfyTopic = try c.decodeIfPresent(String.self, forKey: .ntfyTopic) ?? d.ntfyTopic
         geminiModel = try c.decodeIfPresent(String.self, forKey: .geminiModel) ?? d.geminiModel
         systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt) ?? d.systemPrompt
@@ -57,15 +74,27 @@ public struct Config: Codable, Equatable, Sendable {
 
 public struct AppState: Codable, Equatable, Sendable {
     public var claudeSessionID: String?
-    /// "yyyy-MM-dd" on which Gemini reported its quota exhausted.
-    public var geminiExhaustedOn: String?
+    /// Provider name -> "yyyy-MM-dd" (Pacific) on which it reported its quota gone.
+    /// One entry per Gemini key, so a burnt key is skipped while the others are used.
+    public var exhaustedOn: [String: String]
     /// "x,y,w,h" of the overlay panel.
     public var panelFrame: String?
 
-    public init(claudeSessionID: String? = nil, geminiExhaustedOn: String? = nil, panelFrame: String? = nil) {
+    public init(
+        claudeSessionID: String? = nil,
+        exhaustedOn: [String: String] = [:],
+        panelFrame: String? = nil
+    ) {
         self.claudeSessionID = claudeSessionID
-        self.geminiExhaustedOn = geminiExhaustedOn
+        self.exhaustedOn = exhaustedOn
         self.panelFrame = panelFrame
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        claudeSessionID = try c.decodeIfPresent(String.self, forKey: .claudeSessionID)
+        exhaustedOn = try c.decodeIfPresent([String: String].self, forKey: .exhaustedOn) ?? [:]
+        panelFrame = try c.decodeIfPresent(String.self, forKey: .panelFrame)
     }
 }
 
@@ -82,9 +111,21 @@ public final class ConfigStore {
         self.stateURL = stateURL
     }
 
+    /// Config and state live next to the app bundle. build.sh puts Ghostshot.app at
+    /// the root of the checkout, so everything the app needs sits in one folder that
+    /// can be copied around. `GHOSTSHOT_CONFIG_DIR` overrides the location.
+    public static func defaultDirectory(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleURL: URL = Bundle.main.bundleURL
+    ) -> URL {
+        if let override = environment["GHOSTSHOT_CONFIG_DIR"], !override.isEmpty {
+            return URL(fileURLWithPath: (override as NSString).expandingTildeInPath, isDirectory: true)
+        }
+        return bundleURL.deletingLastPathComponent()
+    }
+
     public static func defaultStore() -> ConfigStore {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/ghostshot", isDirectory: true)
+        let dir = defaultDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return ConfigStore(
             configURL: dir.appendingPathComponent("config.json"),
