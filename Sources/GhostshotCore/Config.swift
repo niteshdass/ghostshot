@@ -111,17 +111,24 @@ public final class ConfigStore {
         self.stateURL = stateURL
     }
 
-    /// Config and state live next to the app bundle. build.sh puts Ghostshot.app at
-    /// the root of the checkout, so everything the app needs sits in one folder that
-    /// can be copied around. `GHOSTSHOT_CONFIG_DIR` overrides the location.
+    /// A source checkout keeps config.json next to Ghostshot.app, so that folder wins
+    /// when it has one. An installed copy (the release zip) sits in ~/Applications,
+    /// or in a read-only translocated path when run straight from Downloads, so it
+    /// falls back to Application Support. `GHOSTSHOT_CONFIG_DIR` overrides both.
     public static func defaultDirectory(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        bundleURL: URL = Bundle.main.bundleURL
+        bundleURL: URL = Bundle.main.bundleURL,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileExists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) -> URL {
         if let override = environment["GHOSTSHOT_CONFIG_DIR"], !override.isEmpty {
             return URL(fileURLWithPath: (override as NSString).expandingTildeInPath, isDirectory: true)
         }
-        return bundleURL.deletingLastPathComponent()
+        let besideBundle = bundleURL.deletingLastPathComponent()
+        if fileExists(besideBundle.appendingPathComponent("config.json").path) {
+            return besideBundle
+        }
+        return homeDirectory.appendingPathComponent("Library/Application Support/Ghostshot", isDirectory: true)
     }
 
     public static func defaultStore() -> ConfigStore {

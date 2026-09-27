@@ -3,6 +3,16 @@
 Written for the person receiving it. Ten minutes, most of it macOS asking for
 permissions.
 
+## Easiest: the release zip
+
+`./release.sh` builds a universal (Apple Silicon + Intel) `dist/Ghostshot-<version>.zip`
+holding both apps, `install.sh` and a README. The receiver unzips it and runs
+`bash install.sh` in Terminal: it copies the apps to `~/Applications`, clears the
+quarantine flag the self-signed signature cannot get past, creates
+`~/Library/Application Support/Ghostshot/config.json`, and installs the launcher.
+No toolchain needed on their side. The rest of this page is the build-from-source
+route.
+
 ## Send the source, not the built app
 
 `Ghostshot.app` does not survive the trip. Anything that arrives by AirDrop, zip,

@@ -4,7 +4,24 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-swift build -c release
+# --universal builds arm64 and x86_64 separately and lipo's them together, for the
+# release zip. Command Line Tools cannot do `--arch a --arch b` (that needs Xcode's
+# build system), but they can cross-compile one triple at a time.
+if [ "${1:-}" = "--universal" ]; then
+    for arch in arm64 x86_64; do
+        swift build -c release --triple "$arch-apple-macosx14.0"
+    done
+    BIN=".build/universal"
+    mkdir -p "$BIN"
+    for exe in GhostshotApp GhostshotLauncher; do
+        lipo -create -output "$BIN/$exe" \
+            ".build/arm64-apple-macosx/release/$exe" \
+            ".build/x86_64-apple-macosx/release/$exe"
+    done
+else
+    swift build -c release
+    BIN=".build/release"
+fi
 
 IDENTITY="Ghostshot Local Signing"
 if security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
@@ -26,7 +43,7 @@ bundle() {
 
     rm -rf "$app"
     mkdir -p "$contents/MacOS" "$contents/Resources"
-    cp ".build/release/$executable" "$contents/MacOS/$executable"
+    cp "$BIN/$executable" "$contents/MacOS/$executable"
     cp "Resources/$plist" "$contents/Info.plist"
     codesign --force --sign "${SIGN[0]}" --identifier "$identifier" --timestamp=none "$app"
     echo "built $PWD/$app"

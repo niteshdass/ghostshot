@@ -105,13 +105,25 @@ import Testing
         }
     }
 
-    @Test func defaultDirectoryIsTheFolderHoldingTheAppBundle() {
+    @Test func defaultDirectoryIsTheCheckoutWhenItHoldsAConfig() {
         let dir = ConfigStore.defaultDirectory(
             environment: [:],
-            bundleURL: URL(fileURLWithPath: "/Users/x/Projects/ghostshot/Ghostshot.app")
+            bundleURL: URL(fileURLWithPath: "/Users/x/Projects/ghostshot/Ghostshot.app"),
+            fileExists: { $0 == "/Users/x/Projects/ghostshot/config.json" }
         )
 
         #expect(dir.path == "/Users/x/Projects/ghostshot")
+    }
+
+    @Test func installedCopyUsesApplicationSupport() {
+        let dir = ConfigStore.defaultDirectory(
+            environment: [:],
+            bundleURL: URL(fileURLWithPath: "/Users/x/Applications/Ghostshot.app"),
+            homeDirectory: URL(fileURLWithPath: "/Users/x"),
+            fileExists: { _ in false }
+        )
+
+        #expect(dir.path == "/Users/x/Library/Application Support/Ghostshot")
     }
 
     @Test func environmentOverridesTheDefaultDirectory() {
@@ -126,7 +138,8 @@ import Testing
     @Test func emptyEnvironmentOverrideIsIgnored() {
         let dir = ConfigStore.defaultDirectory(
             environment: ["GHOSTSHOT_CONFIG_DIR": ""],
-            bundleURL: URL(fileURLWithPath: "/Users/x/Projects/ghostshot/Ghostshot.app")
+            bundleURL: URL(fileURLWithPath: "/Users/x/Projects/ghostshot/Ghostshot.app"),
+            fileExists: { _ in true }
         )
 
         #expect(dir.path == "/Users/x/Projects/ghostshot")

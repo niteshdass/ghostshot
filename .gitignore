@@ -5,3 +5,4 @@ state.json
 .DS_Store
 Ghostshot.app/
 .build/
+dist/
